@@ -229,7 +229,7 @@ class snell:
 
 		return fr
 
-	def transform_image(self, im, smooth=True):
+	def transform_image(self, im, smooth=True, stochastic=False):
 		"""
 		Transforms/distorts input image using the spatial lookup table in self.display and Fresnel transmittance in
 			self.fresdisplay
@@ -238,13 +238,18 @@ class snell:
 			im: 2-D numpy array. Note that image dimensions N x M must equal the dimensions
 				of self.fresdisplay and the first two dimensions of self.display
 		"""
+		weights = im.flatten() * self.fresdisplay.ravel()
+
+		if stochastic:
+			weights[np.random.choice(len(weights),len(weights)//stochastic,replace=False)] = 0
 
 		im_snell = np.histogram2d(np.round(self.display[:,:,0]).astype('int').ravel(),
                               np.round(self.display[:,:,1]).astype('int').ravel(),
-                              np.arange(self.display.shape[0]+1),
-                              weights = im.ravel())
+                              np.arange(0,self.display.shape[0]+1),
+                              weights = weights)
 
-		im_snell = im_snell[0].T * self.fresdisplay
+		#im_snell = im_snell[0].T * self.fresdisplay
+		im_snell = im_snell[0].T
 
 		im_snell[im_snell==0] = np.mean(im)
 
