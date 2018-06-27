@@ -2,6 +2,7 @@ import numpy as np
 from six.moves import cPickle
 import math
 import scipy.ndimage as ndi
+from skimage.transform import downscale_local_mean, rescale
 
 class snell:
 	"""
@@ -101,40 +102,44 @@ class snell:
 		display = np.zeros((self.dispres,self.dispres,2))
 		fresdisplay = np.zeros((self.dispres,self.dispres))
 		
-		for i in range(self.dispres):
-			for j in range(self.dispres):
+		# for i in range(self.dispres):
+		# 	for j in range(self.dispres):
+		#i = np.arange(self.dispres)
+		#j = np.arange(self.dispres)
+		j, i = np.meshgrid(np.arange(self.dispres),np.arange(self.dispres))
 
-				# Get virtual pixel position in cm
-				x_cm = j*self.dispcm/self.dispres
-				y_cm = i*self.dispcm/self.dispres
+		# Get virtual pixel position in cm
+		x_cm = j.ravel()*self.dispcm/self.dispres
+		y_cm = i.ravel()*self.dispcm/self.dispres
 
-				# Calculate distance from origin / vector magnitude
-				d_cm = np.sqrt(x_cm**2 + y_cm**2)
+		# Calculate distance from origin / vector magnitude
+		d_cm = np.sqrt(x_cm**2 + y_cm**2)
 
-				# Calculate unit vector
-				unit_x = x_cm/d_cm
-				unit_y = y_cm/d_cm
+		# Calculate unit vector
+		unit_x = x_cm/d_cm
+		unit_y = y_cm/d_cm
 
-				# Get angle to point from fish perspective
-				d_ang = np.arctan(d_cm/self.ddisp)*180/np.pi
+		# Get angle to point from fish perspective
+		d_ang = np.arctan(d_cm/self.ddisp)*180/np.pi
 
-				# Get angle after distortion by snell's law
-				ind = find_nearest(tres, d_ang)
-				snell_ang = spatLUT_inv[ind]
+		# Get angle after distortion by snell's law
+		ind = find_nearest(tres, d_ang)
+		snell_ang = spatLUT_inv[ind]
+		#return ind, snell_ang, d_ang, d_cm, x_cm, y_cm, j, i
 
-				# Save fresnel transmittance
-				ind = find_nearest(tres, snell_ang)
-				fresdisplay[i,j] = fresnel[ind]
+		# Save fresnel transmittance
+		ind = find_nearest(tres, snell_ang)
+		fresdisplay = np.reshape(fresnel[ind],(self.dispres,self.dispres))
 
-				# Get new vector magnitude along screen
-				snell_cm = self.ddisp*np.tan(snell_ang*np.pi/180)
+		# Get new vector magnitude along screen
+		snell_cm = self.ddisp*np.tan(snell_ang*np.pi/180)
 
-				snell_x_cm = unit_x*snell_cm
-				snell_y_cm = unit_y*snell_cm
+		snell_x_cm = unit_x*snell_cm
+		snell_y_cm = unit_y*snell_cm
 
-				# Record new coordinate positions in pixel-space
-				display[i,j,0] = snell_x_cm*self.dispres/self.dispcm
-				display[i,j,1] = snell_y_cm*self.dispres/self.dispcm
+		# Record new coordinate positions in pixel-space
+		display[:,:,0] = np.reshape(snell_x_cm*self.dispres/self.dispcm,(self.dispres,self.dispres))
+		display[:,:,1] = np.reshape(snell_y_cm*self.dispres/self.dispcm,(self.dispres,self.dispres))
 
 		self.display = self.tile_display(display)
 		self.fresdisplay = self.tile_fresdisplay(fresdisplay)
@@ -256,7 +261,7 @@ class snell:
 		if smooth:
 			return np.log(ndi.filters.gaussian_filter(im_snell,5))
 		else:
-			return np.log(im_snell)
+			return np.log(downscale_local_mean(im_snell,(8,8)))
 
 	def init_inverse_transform(self):
 		"""
@@ -316,7 +321,15 @@ def find_nearest(array,value):
 	Helper function to speed up the search for the index of the "nearest" input value in a sorted array
 	"""
 	idx = np.searchsorted(array, value, side="left")
-	if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
-		return idx-1
-	else:
+
+	if type(value) is np.ndarray:
+		corr = np.logical_or(idx==len(array),np.less(np.abs(value-array[idx-1]),np.abs(value-array[idx])))
+		corr = np.logical_and(corr,idx>0)
+		idx[corr] = idx[corr] - 1
+
 		return idx
+	else:
+		if idx > 0 and (idx == len(array) or math.fabs(value - array[idx-1]) < math.fabs(value - array[idx])):
+			return idx-1
+		else:
+			return idx
