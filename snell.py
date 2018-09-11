@@ -48,7 +48,7 @@ class snell:
 		self.display = None
 		self.fresdisplay = None
 
-		if self.config is not 'flat' and self.config is not 'curved':
+		if self.config is not 'flat' and self.config is not 'curved' and self.config is not 'flat_stochastic':
 			raise Exception('Invalid configuration')
 
 
@@ -58,18 +58,12 @@ class snell:
 			self.make_display_flat()
 		elif self.config is 'curved':
 			self.make_display_curved()
+		elif self.config is 'flat_stochastic':
+			self.make_display_stochastic_flat()
 		else:
 			raise Exception('Invalid configuration')
 
-	def make_display_flat(self):
-		"""
-		Given properties established during instantiation (via __init__()), creates display variables for distorting images.
-
-		This should be called via make_display(), not directly.
-		"""
-		if self.config is not 'flat':
-			raise Exception('Cannot make display, configuration is not flat')
-
+	def spat_fresnel_flat(self):
 		spatLUT = np.zeros((self.angres,))
 		tres = np.linspace(0,self.maxang,self.angres)
 		fresnel = np.zeros(self.angres,)
@@ -98,15 +92,13 @@ class snell:
 		spatLUT[0] = 0
 		for i in range(spatLUT_inv.shape[0]):
 			spatLUT_inv[i] = tres[find_nearest(spatLUT,i)]
-			
+
+		return spatLUT_inv, fresnel, tres
+
+	def grid_to_display(self,j,i, spatLUT_inv, fresnel, tres):
+
 		display = np.zeros((self.dispres,self.dispres,2))
 		fresdisplay = np.zeros((self.dispres,self.dispres))
-		
-		# for i in range(self.dispres):
-		# 	for j in range(self.dispres):
-		#i = np.arange(self.dispres)
-		#j = np.arange(self.dispres)
-		j, i = np.meshgrid(np.arange(self.dispres),np.arange(self.dispres))
 
 		# Get virtual pixel position in cm
 		x_cm = j.ravel()*self.dispcm/self.dispres
@@ -143,6 +135,44 @@ class snell:
 
 		self.display = self.tile_display(display)
 		self.fresdisplay = self.tile_fresdisplay(fresdisplay)
+
+	def make_display_stochastic_flat(self):
+		if self.config is not 'flat' and self.config is not 'flat_stochastic':
+			raise Exception('Cannot make display, configuration is not flat')
+
+		spatLUT_inv, fresnel, tres = self.spat_fresnel_flat()	
+
+		j, i = np.meshgrid(np.arange(self.dispres),np.arange(self.dispres))
+
+		j = j.astype('float64')
+		i = i.astype('float64')
+
+		#Shift all x and y coordinates by random float between 0 and 1
+		j += np.random.rand(self.dispres,self.dispres)
+		i += np.random.rand(self.dispres,self.dispres)
+
+		self.grid_to_display(j,i, spatLUT_inv, fresnel, tres)
+
+	def make_display_flat(self):
+		"""
+		Given properties established during instantiation (via __init__()), creates display variables for distorting images.
+
+		This should be called via make_display(), not directly.
+		"""
+		if self.config is not 'flat':
+			raise Exception('Cannot make display, configuration is not flat')
+
+		spatLUT_inv, fresnel, tres = self.spat_fresnel_flat()	
+	
+		
+		# for i in range(self.dispres):
+		# 	for j in range(self.dispres):
+		#i = np.arange(self.dispres)
+		#j = np.arange(self.dispres)
+		j, i = np.meshgrid(np.arange(self.dispres),np.arange(self.dispres))
+
+		self.grid_to_display(j,i, spatLUT_inv, fresnel, tres)
+
 
 	def make_display_curved(self, filename):
 		"""
@@ -234,7 +264,7 @@ class snell:
 
 		return fr
 
-	def transform_image(self, im, smooth=True, stochastic=False):
+	def transform_image(self, im, smooth=True, downsample=False,stochastic=False, upsample=False):
 		"""
 		Transforms/distorts input image using the spatial lookup table in self.display and Fresnel transmittance in
 			self.fresdisplay
@@ -260,8 +290,12 @@ class snell:
 
 		if smooth:
 			return np.log(ndi.filters.gaussian_filter(im_snell,5))
+		if downsample and not upsample:
+			return np.log(downscale_local_mean(im_snell,(downsample,downsample)))
+		if downsample and upsample:
+			return np.log(rescale(downscale_local_mean(im_snell,(downsample,downsample)),(upsample,upsample)))
 		else:
-			return np.log(downscale_local_mean(im_snell,(8,8)))
+			return np.log(im_snell)
 
 	def init_inverse_transform(self):
 		"""
@@ -282,7 +316,7 @@ class snell:
 				else:
 					self.inverse[(this_pos_x, this_pos_y)] = [[j],[i]]
 
-	def inverse_transform_image(self,im,smooth=True):
+	def inverse_transform_image(self,im,smooth=True,downsample=False,upsample=False):
 		"""
 		Given a target image post-distortion, returns the input image that should be projected onto the screen
 
@@ -313,6 +347,10 @@ class snell:
 
 		if smooth:
 			return ndi.filters.gaussian_filter(input_im.T,5)
+		if downsample and not upsample:
+			return downscale_local_mean(input_im.T,(downsample,downsample))
+		if downsample and upsample:
+			return rescale(downscale_local_mean(input_im.T,(downsample,downsample)),(upsample,upsample))
 		else:
 			return input_im.T
 
