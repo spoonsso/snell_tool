@@ -111,7 +111,7 @@ class snell:
 
 		return spatLUT_inv, fresnel, tres
 
-	def grid_to_display(self,j,i, spatLUT_inv, fresnel, tres):
+	def grid_to_display(self,j,i, spatLUT_inv, fresnel, tres, trans_matrix = False):
 
 		display = np.zeros((self.dispres,self.dispres,2))
 		fresdisplay = np.zeros((self.dispres,self.dispres))
@@ -148,6 +148,7 @@ class snell:
 		# Record new coordinate positions in pixel-space
 		display[:,:,0] = np.reshape(snell_x_cm*self.dispres/self.dispcm,(self.dispres,self.dispres))
 		display[:,:,1] = np.reshape(snell_y_cm*self.dispres/self.dispcm,(self.dispres,self.dispres))
+
 
 		self.display[:,:,:,self.stoch_count] = self.tile_display(display)
 		self.fresdisplay[:,:,self.stoch_count] = self.tile_fresdisplay(fresdisplay)
@@ -339,9 +340,9 @@ class snell:
 			weights[np.random.choice(len(weights),len(weights)//stochastic,replace=False)] = 0
 
 		im_snell = np.histogram2d(np.round(self.display[:,:,0,disp_ind]).astype('int').ravel(),
-                              np.round(self.display[:,:,1,disp_ind]).astype('int').ravel(),
-                              np.arange(0,self.display.shape[0]+1),
-                              weights = weights)
+							  np.round(self.display[:,:,1,disp_ind]).astype('int').ravel(),
+							  np.arange(0,self.display.shape[0]+1),
+							  weights = weights)
 
 		#im_snell = im_snell[0].T * self.fresdisplay
 		im_snell = im_snell[0].T
@@ -424,7 +425,7 @@ class snell:
 
 		return np.mean(np.abs(out-ref))/np.mean(ref)
 
-	def inverse_transform_image_loop(self,im,smooth=False,downsample=False,upsample=False):
+	def inverse_transform_image_loop(self,im,smooth=False,downsample=False,upsample=False,fast=True):
 
 		ref = im.copy()
 		im = rescale(im,(self.supersample_deg,self.supersample_deg))
@@ -438,8 +439,11 @@ class snell:
 		print("inverting image...")
 		for i in range(self.display.shape[3]):
 			print("{}/{} ...".format(i+1,self.display.shape[3]))
-			im_avg[:,:,i] = self.inverse_transform_image(im,smooth=smooth,downsample=downsample,
-				upsample=upsample, disp_ind=i)
+			if not fast:
+				im_avg[:,:,i] = self.inverse_transform_image(im,smooth=smooth,downsample=downsample,
+					upsample=upsample, disp_ind=i)
+			else:
+				im_avg[:,:,i] = self.inverse_transform_image_fast(im, disp_ind=i)
 		print("Done.")
 
 		output = np.mean(im_avg,axis=2)
@@ -449,6 +453,23 @@ class snell:
 
 
 		return output
+
+	def inverse_transform_image_fast(self,im,disp_ind=0):
+		inds = np.ravel_multi_index((np.round(self.display[:,:,0,disp_ind].ravel()).astype('int'),
+			np.round(self.display[:,:,1,disp_ind].ravel()).astype('int')),
+			self.display.shape[:2])
+
+		uniques, inverse_inds, counts = np.unique(inds,return_inverse=True,return_counts=True)
+
+		imshape = im.shape
+
+		im = im.ravel()
+
+		im[uniques] = im[uniques]/counts
+
+		im_out = im[inds]
+
+		return np.reshape(im_out,imshape).T
 
 	def inverse_transform_image(self,im,smooth=True,downsample=False,upsample=False,disp_ind=0):
 		"""
