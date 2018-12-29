@@ -304,8 +304,16 @@ class snell:
 
 		return fr
 
-	def transform_images_loop(self, im, smooth=False, downsample=False,stochastic=False, upsample=False, noexp=False, surround=True):
+	def transform_images_loop(self, im, smooth=False, downsample=False,stochastic=False, upsample=False, noexp=False, surround=True,low_steps=0,high_steps=4,scale=True):
 		# make sure image has no negative values, and also transform to exponential space
+
+		# first, we need to scale im according to low_steps and high_steps
+		# normalzie to [0, 1]
+		im = im.copy()
+
+		if scale:
+			im = (im-np.min(im))/(np.max(im)-np.min(im))*high_steps + low_steps
+
 		if not noexp:
 			im = process_im(im)
 
@@ -323,7 +331,10 @@ class snell:
 			im_avg[:,:,i] = self.transform_image(im,smooth=smooth,downsample=downsample,
 				stochastic=stochastic,upsample=upsample, disp_ind=i, surround=surround)
 
-		return downscale_local_mean(np.mean(im_avg,axis=2),(self.supersample_deg,self.supersample_deg))
+		if not surround:
+			return downscale_local_mean(np.mean(im_avg,axis=2),(self.supersample_deg,self.supersample_deg))
+		else:	
+			return downscale_local_mean(np.mean(np.log(im_avg),axis=2),(self.supersample_deg,self.supersample_deg))
 
 	def transform_image(self, im, smooth=True, downsample=False,stochastic=False, upsample=False,disp_ind = 0,surround=True):
 		"""
@@ -348,7 +359,9 @@ class snell:
 		im_snell = im_snell[0].T
 
 		if surround:
-			im_snell[im_snell==0] = np.mean(im)
+			pass
+			#im_snell[im_snell==0] = np.mean(im)
+			im_snell += np.sum(im)/(im.shape[0]*im.shape[1])
 
 		if smooth:
 			return np.log(ndi.filters.gaussian_filter(im_snell,5))
@@ -356,8 +369,6 @@ class snell:
 			return np.log(downscale_local_mean(im_snell,(downsample,downsample)))
 		if downsample and upsample:
 			return np.log(rescale(downscale_local_mean(im_snell,(downsample,downsample)),(upsample,upsample)))
-		if surround:
-			return np.log(im_snell)
 		else:
 			return im_snell
 
@@ -417,19 +428,33 @@ class snell:
 		#If all good:
 		return None
 
-	def recon_error(self, out, ref):
+	def recon_error(self, out, ref,noexp=False):
 		"""
 		Transforms "out" forward and returns mean squared error between the transformed image and the reference (i.e. target)
 		"""
-		out = self.transform_images_loop(out,noexp=True, surround=False)
+		out = self.transform_images_loop(out,noexp=noexp, surround=False,scale=False)
 
-		return np.mean(np.abs(out-ref))/np.mean(ref)
+		# Add ambient light to reference
+		#ref += np.sum(ref)/(ref.shape[0]*ref.shape[1])
 
-	def inverse_transform_image_loop(self,im,smooth=False,downsample=False,upsample=False,fast=True):
+		# current hard coded values are an attempt to check for errors only within a small window...
+		return np.mean(np.abs(out[350:650,350:650]-np.exp(ref[350:650,350:650])))/np.mean(np.exp(ref[350:650,350:650]))
+
+	def inverse_transform_image_loop(self,im,smooth=False,downsample=False,upsample=False,fast=True,low_steps=0,high_steps=4):
+
+		# first, we need to scale im according to low_steps and high_steps
+		# normalzie to [0, 1]
+		im = im.copy()
+		im = (im-np.min(im))/(np.max(im)-np.min(im))*(high_steps-low_steps) + low_steps
 
 		ref = im.copy()
+
+		im = np.exp(im)
+
 		im = rescale(im,(self.supersample_deg,self.supersample_deg))
 		im = im[:-1,:-1]
+
+
 
 		im_avg = np.zeros((self.display.shape[0], self.display.shape[1], self.display.shape[3]))
 
@@ -446,10 +471,10 @@ class snell:
 				im_avg[:,:,i] = self.inverse_transform_image_fast(im, disp_ind=i)
 		print("Done.")
 
-		output = np.mean(im_avg,axis=2)
+		output = np.mean(np.log(im_avg),axis=2)
 		output = downscale_local_mean(output,(self.supersample_deg,self.supersample_deg))
 		print("Calculating reconstruction error...")
-		print("mean absolute error (proportion of target):{}".format(self.recon_error(output,ref)))
+		print("mean absolute error (proportion of target):{}".format(self.recon_error(output,ref,noexp=False)))
 
 
 		return output
@@ -463,13 +488,13 @@ class snell:
 
 		imshape = im.shape
 
-		im = im.ravel()
+		im_ = im.ravel().copy()
 
-		im[uniques] = im[uniques]/counts
+		im_[uniques] = im_[uniques]/counts
 
-		im_out = im[inds]
+		im_out = im_[inds]
 
-		return np.reshape(im_out,imshape).T
+		return np.reshape(im_out*(1/self.fresdisplay[:,:,disp_ind].ravel()),imshape).T
 
 	def inverse_transform_image(self,im,smooth=True,downsample=False,upsample=False,disp_ind=0):
 		"""
@@ -544,8 +569,8 @@ def process_im(im):
 	Make sure im has no negative values, then transform to exp space
 	"""
 
-	if np.min(im) < 0:
-		raise Exception("Detected negative values in input image. All pixels values must be >= 0")
+	# if np.min(im) < 0:
+	# 	raise Exception("Detected negative values in input image. All pixels values must be >= 0")
 
 	return np.exp(im)
 
