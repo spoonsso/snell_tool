@@ -147,7 +147,7 @@ class snell:
 		self.fresdisplay[:,:,self.stoch_count] = self.tile_fresdisplay(fresdisplay)
 		self.stoch_count = self.stoch_count + 1
 
-	def add_scale(self,lw=5):
+	def add_scale(self,lw=1):
 		"""
 		Once called, adds a scale bar to the active figure based on the virtual display geometry
 		"""
