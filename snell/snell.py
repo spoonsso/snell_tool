@@ -20,7 +20,7 @@ class snell:
 
 	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 4/3, na = 1.,
 					da = 0.1, dw = 1., angres = 100000, maxang = 90, stoch_range=2, 
-					num_stochastic=5,supersample_deg = 4):
+					num_stochastic=5,supersample_deg = 4, dp = None, np_ = None):
 		"""
 		inputs---
 			config: string indiciating setup geometry. Valid inputs: 'flat' or 'flat_stochastic'
@@ -55,6 +55,11 @@ class snell:
 		self.stoch_count = 0
 		self.display = np.zeros((self.dispres*2-1,self.dispres*2-1,2,num_stochastic))
 		self.fresdisplay = np.zeros((self.dispres*2-1,self.dispres*2-1,num_stochastic))
+
+		self.dp = dp
+		self.np = np_
+		if dp is not None:
+			self.dpdw = dp/dw
 
 		if self.config is not 'flat' and self.config is not 'flat_stochastic':
 			raise Exception('Invalid configuration')
@@ -91,6 +96,41 @@ class snell:
 				fresnel[t] = 1-(Rs+Rp)/2
 				
 				spatLUT[t] = find_nearest(tres,xtan)
+
+		spatLUT_track = spatLUT.copy()
+		spatLUT_track[spatLUT_track==0] = len(tres) - 1
+		spatLUT_track[0] = 0
+			
+		spatLUT_inv = np.zeros((self.angres,))
+		spatLUT[spatLUT==0] = np.inf
+		spatLUT[0] = 0
+		for i in range(spatLUT_inv.shape[0]):
+			spatLUT_inv[i] = tres[find_nearest(spatLUT,i)]
+
+		return spatLUT_inv, fresnel, tres
+
+	def spat_fresnel_flat_dp(self):
+		print("Adding plastic interface...")
+		spatLUT = np.zeros((self.angres,))
+		tres = np.linspace(0,self.maxang,self.angres)
+		fresnel = np.zeros(self.angres,)
+		for t in range(spatLUT.shape[0]):
+			theta_ = tres[t] * np.pi/180
+			psi_p = np.arcsin(self.nw*np.sin(theta_)/self.np)
+			psi_a = np.arcsin(self.nw*np.sin(theta_)/self.na)
+
+			x_w = np.tan(theta_)
+			x_p = self.dpdw * np.tan(psi_p)
+			x_a = self.dadw * np.tan(psi_a)
+			x = x_a + x_w + x_p
+			xtan = np.arctan(x/(1 + self.dpdw + self.dadw))*180/np.pi
+			
+			Rp = abs((self.nw*np.cos(psi_a) - self.na*np.cos(psi_p))/(self.nw*np.cos(psi_a) + self.na*np.cos(psi_p)))**2
+			Rs = abs((self.nw*np.cos(psi_p) - self.na*np.cos(psi_a))/(self.nw*np.cos(theta_) + self. na*np.cos(psi_a)))**2
+			
+			fresnel[t] = 1-(Rs+Rp)/2
+			
+			spatLUT[t] = find_nearest(tres,xtan)
 
 		spatLUT_track = spatLUT.copy()
 		spatLUT_track[spatLUT_track==0] = len(tres) - 1
@@ -150,15 +190,12 @@ class snell:
 	def add_scale(self,lw=1):
 		"""
 		Once called, adds a scale bar to the active figure based on the virtual display geometry
+
+		lw: width of the drawn line
 		"""
 
 		#The size of our image/display:
 		native_dispres = self.dispres*2//self.supersample_deg
-
-		#Plot bar with length equal to 1/5 native_dispres
-		# plt.plot([4*native_dispres//5-1, native_dispres-1],[9*native_dispres//10,9*native_dispres//10],'w',linewidth=5)
-		# ang_scale = 2*np.arctan(native_dispres//5/2/(self.ddisp*native_dispres/(self.dispcm*2)))
-		# plt.title("Transformed image. Scale bar = {0:.1f} degrees".format(ang_scale*180/np.pi))
 
 		snell_rad_pix = self.ddisp*np.tan(97.2/2*np.pi/180)*native_dispres/(self.dispcm*2)
 		sn_window = plt.Circle((500,500),snell_rad_pix, edgecolor='y',fill=False,lw=lw)
@@ -170,7 +207,10 @@ class snell:
 		if self.config is not 'flat' and self.config is not 'flat_stochastic':
 			raise Exception('Cannot make display, configuration is not flat')
 
-		spatLUT_inv, fresnel, tres = self.spat_fresnel_flat()	
+		if self.np is not None and self.dp is not None:
+			spatLUT_inv, fresnel, tres = self.spat_fresnel_flat_dp()
+		else:
+			spatLUT_inv, fresnel, tres = self.spat_fresnel_flat()	
 
 		j, i = np.meshgrid(np.arange(self.dispres),np.arange(self.dispres))
 
@@ -435,3 +475,15 @@ def find_nearest(array,value):
 		else:
 			return idx
 
+# class snell_extra(snell):
+# 	"""
+# 	Introduces a third medium to represent a higher refactive index plastic
+# 	"""
+
+# 	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 4/3, na = 1.,
+# 				da = 0.1, dw = 1., angres = 100000, maxang = 90, stoch_range=2, 
+# 				num_stochastic=5,supersample_deg = 4, dp = 1, np = 1.54):
+# 	snell.__init__(config, dispres, dispcm, nw, na, da, dw, angres, maxang, stoch_range, num_stochastic, supersample_deg)
+
+# 	self.dp - dp
+# 	self.np = np
