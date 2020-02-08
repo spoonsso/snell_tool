@@ -7,7 +7,7 @@ setup(
     install_requires=['numpy',
                       'scipy',
                       'imageio',
-                      'scikit-image==0.13.1',
+                      'scikit-image', # was scikit-image==0.13.1
                       'matplotlib',
                       'six',
                       'jupyter']
