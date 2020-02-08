@@ -20,7 +20,7 @@ class snell:
 
 	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 4/3, na = 1.,
 					da = 0.1, dw = 1., angres = 100000, maxang = 90, stoch_range=2, 
-					num_stochastic=5,supersample_deg = 4, dp = None, np_ = None):
+					num_stochastic=5,supersample_deg = 4, dp = None, np_ = None, intensity = None):
 		"""
 		inputs---
 			config: string indiciating setup geometry. Valid inputs: 'flat' or 'flat_stochastic'
@@ -35,6 +35,12 @@ class snell:
 			stoch_range: the range over which random offsets are added to pixel indicies to combat anti-aliasing.
 				Only used when when config == 'flat_stochastic'
 			num_stochastic: number of stochastic displays to use for transformation in order to reduce noise
+
+			dp: optional distance to a plastic interface in a two-interface setup
+			np_: refractive index of the plastic medium
+
+			intensity: dictionary containing 1) an array of angles over which an optional intensity profile is defined (key='angs')
+				and 2) and array of associated intensities, as a fraction of max. intensity (key='intensity')
 		"""
 
 		self.config = config
@@ -55,6 +61,8 @@ class snell:
 		self.stoch_count = 0
 		self.display = np.zeros((self.dispres*2-1,self.dispres*2-1,2,num_stochastic))
 		self.fresdisplay = np.zeros((self.dispres*2-1,self.dispres*2-1,num_stochastic))
+
+		self.intensity = intensity
 
 		self.dp = dp
 		self.np = np_
@@ -94,6 +102,12 @@ class snell:
 				Rs = abs((self.nw*np.cos(theta_) - self.na*np.cos(theta_prime))/(self.nw*np.cos(theta_) + self. na*np.cos(theta_prime)))**2
 				
 				fresnel[t] = 1-(Rs+Rp)/2
+
+				if self.intensity is not None:
+					# Then we look up the intensity for this theta_prime , and scale fresnel[t] by this value
+					#print("Scaling according to intensity profile")
+					i_ind = find_nearest(self.intensity['angs'],theta_prime*180/np.pi)
+					fresnel[t] = fresnel[t]*self.intensity['intensity'][i_ind]
 				
 				spatLUT[t] = find_nearest(tres,xtan)
 
@@ -129,6 +143,11 @@ class snell:
 			Rs = abs((self.nw*np.cos(psi_p) - self.na*np.cos(psi_a))/(self.nw*np.cos(theta_) + self. na*np.cos(psi_a)))**2
 			
 			fresnel[t] = 1-(Rs+Rp)/2
+			if self.intensity is not None:
+				# Then we look up the intensity for this theta_prime , and scale fresnel[t] by this value
+				#print("Scaling according to intensity profile")
+				i_ind = find_nearest(self.intensity['angs'],psi_a*180/np.pi)
+				fresnel[t] = fresnel[t]*self.intensity['intensity'][i_ind]
 			
 			spatLUT[t] = find_nearest(tres,xtan)
 
