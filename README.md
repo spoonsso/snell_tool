@@ -1,3 +1,5 @@
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/spoonsso/snell_tool/00d5408dfab776aaade97c22af609690fc1f3c96)
+
 # snell_tool
 
 **snell_tool** requires Python 3 and a few standard python packages. If you do not already have Python installed, I recommend the Anaconda python distribution, https://www.anaconda.com/distribution/.
