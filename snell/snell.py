@@ -18,7 +18,7 @@ class snell:
 	Accompanies Dunn & Fitzgerald (2019).
 	"""
 
-	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 4/3, na = 1.,
+	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 1.333, na = 1.,
 					da = 0.1, dw = 1., angres = 100000, maxang = 90, stoch_range=2, 
 					num_stochastic=5,supersample_deg = 4, dp = None, np_ = None, intensity = None):
 		"""
@@ -493,16 +493,3 @@ def find_nearest(array,value):
 			return idx-1
 		else:
 			return idx
-
-# class snell_extra(snell):
-# 	"""
-# 	Introduces a third medium to represent a higher refactive index plastic
-# 	"""
-
-# 	def __init__(self, config = 'flat_stochastic', dispres = 2000, dispcm = 2, nw = 4/3, na = 1.,
-# 				da = 0.1, dw = 1., angres = 100000, maxang = 90, stoch_range=2, 
-# 				num_stochastic=5,supersample_deg = 4, dp = 1, np = 1.54):
-# 	snell.__init__(config, dispres, dispcm, nw, na, da, dw, angres, maxang, stoch_range, num_stochastic, supersample_deg)
-
-# 	self.dp - dp
-# 	self.np = np
